@@ -5,12 +5,10 @@
 // ===== THƯ VIỆN WEB =====
 #include <WiFi.h>
 #include <WebServer.h>
-#include <HTTPClient.h>
-const char *apiUrl = "https://your-backend.com/api/fire-alert"; // URL API của bạn
 
-// ===== CẤU HÌNH WIFI (SỬA Ở ĐÂY) =====
-const char *ssid = "DUC CO";        // <--- Điền Tên WiFi
-const char *password = "ducco2711"; // <--- Điền Mật khẩu
+// ===== CẤU HÌNH WIFI =====
+const char *ssid = "DUC CO";        // Điền Tên WiFi
+const char *password = "ducco2711"; // Điền Mật khẩu
 
 WebServer server(80); // Khởi tạo Web Server
 
@@ -19,7 +17,8 @@ WebServer server(80); // Khởi tạo Web Server
 #define PCF_ADDR 0x20
 LiquidCrystal_I2C lcd(LCD_ADDR, 16, 2);
 PCF8574 pcf(PCF_ADDR);
-
+#define PCF_LED_ADDR 0x21      // Mạch mới cho 6 đèn LED
+PCF8574 pcfLeds(PCF_LED_ADDR); // Khai báo đối tượng điều khiển LED
 // ================= CỔNG =====================
 #define TRIG_IN 33
 #define ECHO_IN 32
@@ -203,9 +202,27 @@ long getDistance(int t, int e)
 
 void updateSlots()
 {
+  // 1. Đọc khoảng cách từ 3 cảm biến siêu âm
   slot[0] = getDistance(TRIG_P1, ECHO_P1) < SLOT_THRESHOLD;
   slot[1] = getDistance(TRIG_P2, ECHO_P2) < SLOT_THRESHOLD;
   slot[2] = getDistance(TRIG_P3, ECHO_P3) < SLOT_THRESHOLD;
+
+  // 2. Điều khiển 6 đèn LED qua PCF8574 thứ hai
+  for (int i = 0; i < 3; i++)
+  {
+    if (slot[i])
+    {
+      // CÓ XE: Tắt Xanh (P0,P1,P2), Bật Đỏ (P3,P4,P5)
+      pcfLeds.write(i, HIGH);    // Logic HIGH = Tắt (với cách nối Dương chung)
+      pcfLeds.write(i + 3, LOW); // Logic LOW = Sáng
+    }
+    else
+    {
+      // TRỐNG: Bật Xanh (P0,P1,P2), Tắt Đỏ (P3,P4,P5)
+      pcfLeds.write(i, LOW);      // Bật Xanh
+      pcfLeds.write(i + 3, HIGH); // Tắt Đỏ
+    }
+  }
 }
 
 void drawSlots()
@@ -295,7 +312,7 @@ void setup()
   lcd.init();
   lcd.backlight();
   pcf.begin();
-
+  pcfLeds.begin(); // Khởi tạo mạch LED
   // KẾT NỐI WIFI
   lcd.print("Ket noi WiFi...");
   WiFi.begin(ssid, password);
@@ -663,3 +680,49 @@ void loop()
       gateTimer = 0;
   }
 }
+
+// Từ code IoT này tôi muốn kết nối với BE https://smart-parking-server-b8oa.onrender.com cho những phần sau:
+// - Khách hàng checkin bãi đỗ xe: Nhập số điện thoại/mật khẩu, dữ liệu sẽ được gửi đến API /users/check-in với dữ liệu req là:
+// {
+//   "phone": "string",
+//   "password": "string"
+// }
+// - Khách hàng checkout bãi đỗ xe: Nhập số điện thoại/mật khẩu, dữ liệu sẽ được gửi đến API /users/check-out với dữ liệu req là:
+// {
+//   "phone": "string",
+//   "password": "string"
+// }
+// - Khi có cháy xảy ra thì gọi API cảnh báo cháy /users/fire
+// - Khi có khí gas rò rỉ thì gọi API cảnh báo khí gas /users/gas
+// - Khi có một bãi đỗ có xe đỗ/rời đi thì gửi dữ liệu đến API để thay đổi trạng thái bãi đỗ /parking-lots/{plot_id} với dữ liệu req:
+// {
+//   "id": "string",
+//   "name": "string",
+//   "status": "string"
+// }
+// Với data của các slot P1, P2, P3 lần lượt là:
+// {
+//   "_id": {
+//     "$oid": "695c82d7936586d8a602ae70"
+//   },
+//   "name": "Slot A1",
+//   "unit_price": 15,
+//   "status": "available"
+// }
+// {
+//   "_id": {
+//     "$oid": "695c82d7936586d8a602ae71"
+//   },
+//   "name": "Slot A2",
+//   "unit_price": 15,
+//   "status": "available"
+// }
+// {
+//   "_id": {
+//     "$oid": "695c82d7936586d8a602ae72"
+//   },
+//   "name": "Slot A3",
+//   "unit_price": 15,
+//   "status": "available"
+// }
+// Nếu có sẽ đỗ thì trạng thái từ Available thành Occupied và ngược lại
