@@ -5,10 +5,12 @@
 // ===== THƯ VIỆN WEB =====
 #include <WiFi.h>
 #include <WebServer.h>
+#include <HTTPClient.h>
+const char *apiUrl = "https://your-backend.com/api/fire-alert"; // URL API của bạn
 
 // ===== CẤU HÌNH WIFI (SỬA Ở ĐÂY) =====
-const char* ssid = "DUC CO";     // <--- Điền Tên WiFi
-const char* password = "ducco2711";    // <--- Điền Mật khẩu
+const char *ssid = "DUC CO";        // <--- Điền Tên WiFi
+const char *password = "ducco2711"; // <--- Điền Mật khẩu
 
 WebServer server(80); // Khởi tạo Web Server
 
@@ -19,12 +21,12 @@ LiquidCrystal_I2C lcd(LCD_ADDR, 16, 2);
 PCF8574 pcf(PCF_ADDR);
 
 // ================= CỔNG =====================
-#define TRIG_IN   33
-#define ECHO_IN   32
-#define SERVO_IN  25
+#define TRIG_IN 33
+#define ECHO_IN 32
+#define SERVO_IN 25
 
-#define TRIG_OUT  27
-#define ECHO_OUT  14
+#define TRIG_OUT 27
+#define ECHO_OUT 14
 #define SERVO_OUT 13
 
 // ================= CHỖ ĐỖ ===================
@@ -37,7 +39,7 @@ PCF8574 pcf(PCF_ADDR);
 
 // ================= CẢM BIẾN =================
 #define FIRE_PIN 26
-#define GAS_PIN  34
+#define GAS_PIN 34
 
 // ================= CẢM BIẾN MƯA & MÁI CHE ====
 #define RAIN_PIN 35       // Chân cảm biến mưa
@@ -46,7 +48,7 @@ PCF8574 pcf(PCF_ADDR);
 // ================= ÁNH SÁNG (MỚI) ===========
 #define LIGHT_SENSOR_PIN 36 // Cảm biến ánh sáng
 #define LED_PIN 2           // Đèn LED chiếu sáng
-#define BUZZER_PIN 12 // Còi Báo Động 
+#define BUZZER_PIN 12       // Còi Báo Động
 
 // ================= THAM SỐ ==================
 #define MAX_CARS 3
@@ -58,15 +60,14 @@ PCF8574 pcf(PCF_ADDR);
 #define SLOT_UPDATE_INTERVAL 500
 
 Servo servoIn, servoOut;
-Servo servoRoof; 
+Servo servoRoof;
 
 // ================= KEYPAD ===================
 char keymap[4][4] = {
-  {'D','C','B','A'},
-  {'#','9','6','3'},
-  {'0','8','5','2'},
-  {'*','7','4','1'}
-};
+    {'D', 'C', 'B', 'A'},
+    {'#', '9', '6', '3'},
+    {'0', '8', '5', '2'},
+    {'*', '7', '4', '1'}};
 
 // ================= DỮ LIỆU XE ===============
 String carID[MAX_CARS];
@@ -79,9 +80,9 @@ bool lastSlot[3];
 unsigned long lastSlotUpdate = 0;
 
 // THAY ĐỔI: Tách thành 3 mảng riêng
-String logCars[10];   // Lưu 10 xe gần nhất
-String logSystem[5];  // Lưu 5 hoạt động hệ thống (Barie, Mái che)
-String logAlarm[5];   // Lưu 5 cảnh báo nguy hiểm
+String logCars[10];  // Lưu 10 xe gần nhất
+String logSystem[5]; // Lưu 5 hoạt động hệ thống (Barie, Mái che)
+String logAlarm[5];  // Lưu 5 cảnh báo nguy hiểm
 
 // ================= TRẠNG THÁI ===============
 bool waitingInput = false;
@@ -109,20 +110,23 @@ bool beepState = false;
 // ================= HÀM WEB SERVER ===========
 // ================= HÀM LOGGING (MỚI) ========
 // Hàm gốc để thêm dữ liệu vào mảng
-void addLog(String array[], int size, String msg) {
-  for(int i=size-1; i>0; i--) array[i] = array[i-1];
+void addLog(String array[], int size, String msg)
+{
+  for (int i = size - 1; i > 0; i--)
+    array[i] = array[i - 1];
   array[0] = msg;
 }
 
 // Các hàm gọi tắt cho gọn
-void logCar(String msg)   { addLog(logCars, 10, msg); }
-void logSys(String msg)   { addLog(logSystem, 5, msg); }
-void logDanger(String msg){ addLog(logAlarm, 5, msg); }
+void logCar(String msg) { addLog(logCars, 10, msg); }
+void logSys(String msg) { addLog(logSystem, 5, msg); }
+void logDanger(String msg) { addLog(logAlarm, 5, msg); }
 
-String getWebPage(){
+String getWebPage()
+{
   String ptr = "<!DOCTYPE html><html><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1.0'>";
   ptr += "<title>Quan Ly Bai Xe</title>";
-  
+
   // CSS MỚI: Thêm màu sắc cho từng bảng
   ptr += "<style>";
   ptr += "body{font-family:Arial;margin:10px;text-align:center}";
@@ -132,96 +136,126 @@ String getWebPage(){
   ptr += "table{width:100%;border-collapse:collapse;margin-top:5px}";
   ptr += "th,td{border:1px solid #ddd;padding:6px;text-align:left;font-size:13px}";
   ptr += "th{background:#f4f4f4}";
-  ptr += ".h-car th{background:#d6eaf8; color:#154360}";   // Xanh dương (Xe)
-  ptr += ".h-sys th{background:#d5f5e3; color:#186a3b}";   // Xanh lá (Hệ thống)
+  ptr += ".h-car th{background:#d6eaf8; color:#154360}";    // Xanh dương (Xe)
+  ptr += ".h-sys th{background:#d5f5e3; color:#186a3b}";    // Xanh lá (Hệ thống)
   ptr += ".h-danger th{background:#fadbd8; color:#78281f}"; // Đỏ (Nguy hiểm)
   ptr += "</style>";
   ptr += "<script>setInterval(function(){location.reload();}, 3000);</script></head><body>";
-  
+
   ptr += "<h2>HE THONG BAI XE</h2>";
-  
+
   // 1. Trạng thái Slots & Mái che
   ptr += "<div class='box'><h3>TRANG THAI</h3>";
   ptr += "<p>Mai che: <b>" + String(isRaining ? "DANG DONG (Mua)" : "DANG MO (Nang)") + "</b></p>";
   ptr += "Den san: <b>" + String(isDark ? "DANG BAT (Toi)" : "DANG TAT (Sang)") + "</b></p>"; // Hiện trạng thái đèn
-  for(int i=0; i<3; i++){
-    if(slot[i]) ptr += "<div class='slot full'>XE " + String(i+1) + "</div>";
-    else ptr += "<div class='slot empty'>TRONG</div>";
+  for (int i = 0; i < 3; i++)
+  {
+    if (slot[i])
+      ptr += "<div class='slot full'>XE " + String(i + 1) + "</div>";
+    else
+      ptr += "<div class='slot empty'>TRONG</div>";
   }
   ptr += "</div>";
 
   // 2. Bảng Lịch sử Xe
   ptr += "<div class='box'><h3 style='color:#154360'>LICH SU XE RA/VAO</h3><table class='h-car'>";
-  for(int i=0; i<10; i++) if(logCars[i]!="") ptr += "<tr><td>" + logCars[i] + "</td></tr>";
+  for (int i = 0; i < 10; i++)
+    if (logCars[i] != "")
+      ptr += "<tr><td>" + logCars[i] + "</td></tr>";
   ptr += "</table></div>";
 
   // 3. Bảng Hoạt động Hệ thống
   ptr += "<div class='box'><h3 style='color:#186a3b'>HOAT DONG HE THONG</h3><table class='h-sys'>";
-  for(int i=0; i<5; i++) if(logSystem[i]!="") ptr += "<tr><td>" + logSystem[i] + "</td></tr>";
+  for (int i = 0; i < 5; i++)
+    if (logSystem[i] != "")
+      ptr += "<tr><td>" + logSystem[i] + "</td></tr>";
   ptr += "</table></div>";
 
   // 4. Bảng Cảnh báo
   ptr += "<div class='box'><h3 style='color:#c0392b'>CANH BAO NGUY HIEM</h3><table class='h-danger'>";
-  for(int i=0; i<5; i++) if(logAlarm[i]!="") ptr += "<tr><td style='color:red;font-weight:bold'>" + logAlarm[i] + "</td></tr>";
+  for (int i = 0; i < 5; i++)
+    if (logAlarm[i] != "")
+      ptr += "<tr><td style='color:red;font-weight:bold'>" + logAlarm[i] + "</td></tr>";
   ptr += "</table></div>";
 
   ptr += "</body></html>";
   return ptr;
 }
 
-void handleRoot() {
+void handleRoot()
+{
   server.send(200, "text/html", getWebPage());
 }
 
 // ================= HÀM LOGIC CŨ =============
-long getDistance(int t, int e){
-  digitalWrite(t, LOW); delayMicroseconds(2);
-  digitalWrite(t, HIGH); delayMicroseconds(10);
+long getDistance(int t, int e)
+{
+  digitalWrite(t, LOW);
+  delayMicroseconds(2);
+  digitalWrite(t, HIGH);
+  delayMicroseconds(10);
   digitalWrite(t, LOW);
   long d = pulseIn(e, HIGH, 25000);
-  if(d == 0) return 999;
+  if (d == 0)
+    return 999;
   return d * 0.034 / 2;
 }
 
-void updateSlots(){
+void updateSlots()
+{
   slot[0] = getDistance(TRIG_P1, ECHO_P1) < SLOT_THRESHOLD;
   slot[1] = getDistance(TRIG_P2, ECHO_P2) < SLOT_THRESHOLD;
   slot[2] = getDistance(TRIG_P3, ECHO_P3) < SLOT_THRESHOLD;
 }
 
-void drawSlots(){
-  lcd.setCursor(0,0);
+void drawSlots()
+{
+  lcd.setCursor(0, 0);
   lcd.print("CHO DO: ");
-  for(int i=0;i<3;i++) lcd.print(slot[i] ? "[x]" : "[ ]");
+  for (int i = 0; i < 3; i++)
+    lcd.print(slot[i] ? "[x]" : "[ ]");
 }
 
-void showHome(){
+void showHome()
+{
   lcd.clear();
   drawSlots();
-  lcd.setCursor(0,1);
+  lcd.setCursor(0, 1);
   // HIỂN THỊ IP ĐỂ BIẾT ĐƯỜNG VÀO WEB
-  if(WiFi.status() == WL_CONNECTED){
-    lcd.print("IP:"); lcd.print(WiFi.localIP());
-  } else {
+  if (WiFi.status() == WL_CONNECTED)
+  {
+    lcd.print("IP:");
+    lcd.print(WiFi.localIP());
+  }
+  else
+  {
     lcd.print("Dang cho xe...");
   }
   waitingInput = false;
   inputID = "";
 }
 
-int countCars(){
+int countCars()
+{
   int c = 0;
-  for(int i=0;i<MAX_CARS;i++) if(carID[i] != "") c++;
+  for (int i = 0; i < MAX_CARS; i++)
+    if (carID[i] != "")
+      c++;
   return c;
 }
 
-char scanKeypad(){
-  for(int r=0;r<4;r++){
+char scanKeypad()
+{
+  for (int r = 0; r < 4; r++)
+  {
     pcf.write8(0xFF);
     pcf.write(r, LOW);
-    for(int c=0;c<4;c++){
-      if(pcf.read(c+4) == LOW){
-        while(pcf.read(c+4) == LOW);
+    for (int c = 0; c < 4; c++)
+    {
+      if (pcf.read(c + 4) == LOW)
+      {
+        while (pcf.read(c + 4) == LOW)
+          ;
         return keymap[r][c];
       }
     }
@@ -229,15 +263,22 @@ char scanKeypad(){
   return 0;
 }
 
-int findCar(String id){
-  for(int i=0;i<MAX_CARS;i++) if(carID[i] == id) return i;
+int findCar(String id)
+{
+  for (int i = 0; i < MAX_CARS; i++)
+    if (carID[i] == id)
+      return i;
   return -1;
 }
 
-bool addCar(String id){
-  if(findCar(id) != -1) return false;
-  for(int i=0;i<MAX_CARS;i++){
-    if(carID[i] == ""){
+bool addCar(String id)
+{
+  if (findCar(id) != -1)
+    return false;
+  for (int i = 0; i < MAX_CARS; i++)
+  {
+    if (carID[i] == "")
+    {
       carID[i] = id;
       carTimeIn[i] = millis();
       logCar("VAO: TK " + id);
@@ -248,32 +289,40 @@ bool addCar(String id){
 }
 
 // ================= SETUP ====================
-void setup(){
+void setup()
+{
   Wire.begin();
   lcd.init();
   lcd.backlight();
   pcf.begin();
-  
+
   // KẾT NỐI WIFI
   lcd.print("Ket noi WiFi...");
   WiFi.begin(ssid, password);
   int retry = 0;
-  while(WiFi.status() != WL_CONNECTED && retry < 20){
-    delay(500); retry++;
+  while (WiFi.status() != WL_CONNECTED && retry < 20)
+  {
+    delay(500);
+    retry++;
   }
-  
+
   // KHỞI CHẠY SERVER
   server.on("/", handleRoot);
   server.begin();
 
-  pinMode(TRIG_IN,OUTPUT); pinMode(ECHO_IN,INPUT);
-  pinMode(TRIG_OUT,OUTPUT); pinMode(ECHO_OUT,INPUT);
-  pinMode(TRIG_P1,OUTPUT); pinMode(ECHO_P1,INPUT);
-  pinMode(TRIG_P2,OUTPUT); pinMode(ECHO_P2,INPUT);
-  pinMode(TRIG_P3,OUTPUT); pinMode(ECHO_P3,INPUT);
+  pinMode(TRIG_IN, OUTPUT);
+  pinMode(ECHO_IN, INPUT);
+  pinMode(TRIG_OUT, OUTPUT);
+  pinMode(ECHO_OUT, INPUT);
+  pinMode(TRIG_P1, OUTPUT);
+  pinMode(ECHO_P1, INPUT);
+  pinMode(TRIG_P2, OUTPUT);
+  pinMode(ECHO_P2, INPUT);
+  pinMode(TRIG_P3, OUTPUT);
+  pinMode(ECHO_P3, INPUT);
 
-  pinMode(FIRE_PIN,INPUT);
-  pinMode(GAS_PIN,INPUT);
+  pinMode(FIRE_PIN, INPUT);
+  pinMode(GAS_PIN, INPUT);
   pinMode(RAIN_PIN, INPUT); // Cấu hình chân cảm biến mưa
   // SETUP ÁNH SÁNG & LED
   pinMode(LIGHT_SENSOR_PIN, INPUT);
@@ -282,7 +331,8 @@ void setup(){
   servoIn.attach(SERVO_IN);
   servoOut.attach(SERVO_OUT);
   servoRoof.attach(SERVO_ROOF_PIN); // Gắn servo mái che
-  servoIn.write(0); servoOut.write(0);
+  servoIn.write(0);
+  servoOut.write(0);
   servoRoof.write(0); // Mặc định mở mái che (0 độ)
   updateSlots();
   memcpy(lastSlot, slot, sizeof(slot));
@@ -290,196 +340,267 @@ void setup(){
 }
 
 // ================= LOOP =====================
-void loop(){
+void loop()
+{
   server.handleClient(); // <--- BẮT BUỘC ĐỂ WEB CHẠY
 
   // ===== UPDATE SLOT REALTIME =====
-  if(millis() - lastSlotUpdate > SLOT_UPDATE_INTERVAL){
+  if (millis() - lastSlotUpdate > SLOT_UPDATE_INTERVAL)
+  {
     lastSlotUpdate = millis();
     updateSlots();
-    if(memcmp(slot, lastSlot, sizeof(slot)) != 0){
+    if (memcmp(slot, lastSlot, sizeof(slot)) != 0)
+    {
       memcpy(lastSlot, slot, sizeof(slot));
-      if(!waitingInput && !gateOpen) drawSlots();
+      if (!waitingInput && !gateOpen)
+        drawSlots();
     }
   }
   // ===== ÁNH SÁNG (TỰ ĐỘNG BẬT ĐÈN) =====
   int lightVal = digitalRead(LIGHT_SENSOR_PIN);
-  // Lưu ý: Tùy loại cảm biến, có thể HIGH là Tối hoặc HIGH là Sáng. 
+  // Lưu ý: Tùy loại cảm biến, có thể HIGH là Tối hoặc HIGH là Sáng.
   // Thông thường: HIGH = Tối (khi che tay vào)
-  if(lightVal == HIGH && !isDark){
+  if (lightVal == HIGH && !isDark)
+  {
     isDark = true;
     digitalWrite(LED_PIN, HIGH); // Bật đèn
     logSys("TOI: Da bat den LED");
   }
-  else if(lightVal == LOW && isDark){
+  else if (lightVal == LOW && isDark)
+  {
     isDark = false;
     digitalWrite(LED_PIN, LOW); // Tắt đèn
     logSys("SANG: Da tat den LED");
   }
-// ===== XỬ LÝ MƯA (CÓ TRỄ 5 GIÂY) =========================
-// ========================================================
-int rainStatus = digitalRead(RAIN_PIN);
+  // ===== XỬ LÝ MƯA (CÓ TRỄ 5 GIÂY) =========================
+  // ========================================================
+  int rainStatus = digitalRead(RAIN_PIN);
 
-// ---------- PHÁT HIỆN MƯA ----------
-if (rainStatus == LOW) {
-  if (!isRaining) {
-    isRaining = true;
-    rainStopTime = 0;          // Reset thời gian chờ
-    servoRoof.write(90);       // Đóng mái che
-    logSys("MUA: Dong mai che");
-  }
-}
-
-// ---------- KHÔNG MƯA ----------
-else { // rainStatus == HIGH
-  if (isRaining && rainStopTime == 0) {
-    // Ghi nhận thời điểm vừa hết mưa
-    rainStopTime = millis();
+  // ---------- PHÁT HIỆN MƯA ----------
+  if (rainStatus == LOW)
+  {
+    if (!isRaining)
+    {
+      isRaining = true;
+      rainStopTime = 0;    // Reset thời gian chờ
+      servoRoof.write(90); // Đóng mái che
+      logSys("MUA: Dong mai che");
+    }
   }
 
-  // Sau 5 giây vẫn không mưa -> mở mái
-  if (isRaining && rainStopTime > 0 &&
-      millis() - rainStopTime >= RAIN_DELAY) {
+  // ---------- KHÔNG MƯA ----------
+  else
+  { // rainStatus == HIGH
+    if (isRaining && rainStopTime == 0)
+    {
+      // Ghi nhận thời điểm vừa hết mưa
+      rainStopTime = millis();
+    }
 
-    isRaining = false;
-    rainStopTime = 0;
-    servoRoof.write(0);        // Mở mái che
-    logSys("NANG: Mo mai che sau 5s");
+    // Sau 5 giây vẫn không mưa -> mở mái
+    if (isRaining && rainStopTime > 0 &&
+        millis() - rainStopTime >= RAIN_DELAY)
+    {
+
+      isRaining = false;
+      rainStopTime = 0;
+      servoRoof.write(0); // Mở mái che
+      logSys("NANG: Mo mai che sau 5s");
+    }
   }
-}
 
   // ============================================
   // ===== LOGIC LỬA (Còi ngay) ========
-  if(digitalRead(FIRE_PIN)){
-    // 1. Phát hiện lửa -> Kích hoạt chế độ NGAY 
-    if(!fireMode){ 
-        fireMode = true; 
-        fireStart = millis(); // Bắt đầu đếm giờ mở cổng
-        logDanger("Phat hien LUA!"); 
+  if (digitalRead(FIRE_PIN))
+  {
+    // 1. Phát hiện lửa -> Kích hoạt chế độ NGAY
+    if (!fireMode)
+    {
+      fireMode = true;
+      fireStart = millis(); // Bắt đầu đếm giờ mở cổng
+      logDanger("Phat hien LUA!");
     }
-    
+
     // 2. Chỉ mở cổng khi đã cháy > 3 giây
-    if(millis() - fireStart > 3000){
-       lcd.clear(); lcd.print("!!! CHAY !!!"); 
-       servoIn.write(90); servoOut.write(90);
+    if (millis() - fireStart > 3000)
+    {
+      lcd.clear();
+      lcd.print("!!! CHAY !!!");
+      servoIn.write(90);
+      servoOut.write(90);
     }
-    
+
     fireClear = 0; // Reset đếm tắt
-  } else {
+  }
+  else
+  {
     // Không thấy lửa
-    fireStart = 0; 
-    if(fireMode){
-      if(fireClear == 0) fireClear = millis();
+    fireStart = 0;
+    if (fireMode)
+    {
+      if (fireClear == 0)
+        fireClear = millis();
       // Hết lửa 3 giây thì tắt chế độ (tắt còi, đóng cổng)
-      if(millis() - fireClear > 3000){ 
-        fireMode = false; 
-        servoIn.write(0); servoOut.write(0); 
-        logSys("CHAY: Da tat"); showHome(); 
+      if (millis() - fireClear > 3000)
+      {
+        fireMode = false;
+        servoIn.write(0);
+        servoOut.write(0);
+        logSys("CHAY: Da tat");
+        showHome();
       }
     }
   }
 
   // --- GAS ---
-  if(digitalRead(GAS_PIN)){
-    if(!gasMode){
-      gasMode = true; gasStart = millis();
-      lcd.clear(); lcd.print("Canh bao GAS"); logDanger("Phat hien khi GAS"); 
+  if (digitalRead(GAS_PIN))
+  {
+    if (!gasMode)
+    {
+      gasMode = true;
+      gasStart = millis();
+      lcd.clear();
+      lcd.print("Canh bao GAS");
+      logDanger("Phat hien khi GAS");
     }
-    if(millis() - gasStart > 4000){
-      lcd.clear(); lcd.print("!!! GAS !!!");
-      servoIn.write(90); servoOut.write(90);
+    if (millis() - gasStart > 4000)
+    {
+      lcd.clear();
+      lcd.print("!!! GAS !!!");
+      servoIn.write(90);
+      servoOut.write(90);
     }
     gasClear = 0;
-  } else if(gasMode){
-    if(gasClear == 0) gasClear = millis();
-    if(millis() - gasClear > 3000){
-      gasMode = false; servoIn.write(0); servoOut.write(0); showHome();
+  }
+  else if (gasMode)
+  {
+    if (gasClear == 0)
+      gasClear = millis();
+    if (millis() - gasClear > 3000)
+    {
+      gasMode = false;
+      servoIn.write(0);
+      servoOut.write(0);
+      showHome();
     }
   }
 
   // ===========================================
   // ===== XỬ LÝ CÒI (PASSIVE BUZZER) ==========
   // ===========================================
-  if(fireMode || gasMode){
-    if(millis() - beepTimer > 200){
+  if (fireMode || gasMode)
+  {
+    if (millis() - beepTimer > 200)
+    {
       beepTimer = millis();
       beepState = !beepState;
-      if(beepState){
+      if (beepState)
+      {
         // Kêu tần số 2000Hz (Tiếng Tít)
-        tone(BUZZER_PIN, 2000); 
-      } else {
+        tone(BUZZER_PIN, 2000);
+      }
+      else
+      {
         // Tắt tiếng
-        noTone(BUZZER_PIN); 
+        noTone(BUZZER_PIN);
       }
     }
-  } else {
+  }
+  else
+  {
     noTone(BUZZER_PIN); // Đảm bảo tắt còi khi an toàn
   }
   // ===========================================
 
-  if(fireMode || gasMode) return;
-  long dIn  = getDistance(TRIG_IN, ECHO_IN);
+  if (fireMode || gasMode)
+    return;
+  long dIn = getDistance(TRIG_IN, ECHO_IN);
   long dOut = getDistance(TRIG_OUT, ECHO_OUT);
 
   // ===== PHÁT HIỆN XE =====
-  if(!waitingInput && !gateOpen){
-    if(dIn < DIST_THRESHOLD){
-      if(countCars() >= MAX_CARS){
-        lcd.clear(); lcd.print("NHA XE DAY");
-        delay(2000); showHome(); return;
+  if (!waitingInput && !gateOpen)
+  {
+    if (dIn < DIST_THRESHOLD)
+    {
+      if (countCars() >= MAX_CARS)
+      {
+        lcd.clear();
+        lcd.print("NHA XE DAY");
+        delay(2000);
+        showHome();
+        return;
       }
       gateIsIn = true;
     }
-    else if(dOut < DIST_THRESHOLD){
+    else if (dOut < DIST_THRESHOLD)
+    {
       gateIsIn = false;
     }
-    else return;
+    else
+      return;
 
     waitingInput = true;
     inputID = "";
     inputTimer = millis();
     lcd.clear();
     lcd.print(gateIsIn ? "CONG VAO" : "CONG RA");
-    lcd.setCursor(0,1);
+    lcd.setCursor(0, 1);
     lcd.print("Nhap TK");
     return;
   }
 
   // ===== NHẬP TK =====
-  if(waitingInput){
+  if (waitingInput)
+  {
     char k = scanKeypad();
-    if(k){
-      if(k >= '0' && k <= '9'){
+    if (k)
+    {
+      if (k >= '0' && k <= '9')
+      {
         inputID += k;
         lcd.print("*");
       }
-      if(k == '*'){
+      if (k == '*')
+      {
         inputID = "";
-        lcd.setCursor(0,1);
+        lcd.setCursor(0, 1);
         lcd.print("Nhap TK      ");
       }
-      if(k == '#'){
-        if(gateIsIn){
+      if (k == '#')
+      {
+        if (gateIsIn)
+        {
           // --- LOGIC XE VÀO ---
-          if(!addCar(inputID)){
-            lcd.clear(); lcd.print("TK TON TAI");
-            delay(1500); showHome(); return;
+          if (!addCar(inputID))
+          {
+            lcd.clear();
+            lcd.print("TK TON TAI");
+            delay(1500);
+            showHome();
+            return;
           }
           servoIn.write(90);
           gateOpen = true;
           logSys("Mo cong VAO"); // Log hệ thống
-        } else {
+        }
+        else
+        {
           // --- LOGIC XE RA (GIỮ NGUYÊN CODE TÍNH TIỀN) ---
           int i = findCar(inputID);
-          if(i == -1){
-            lcd.clear(); lcd.print("SAI TK");
-            delay(1500); showHome(); return;
+          if (i == -1)
+          {
+            lcd.clear();
+            lcd.print("SAI TK");
+            delay(1500);
+            showHome();
+            return;
           }
 
           // 1. Tính thời gian (phút)
           unsigned long duration = millis() - carTimeIn[i];
           long minutes = duration / 60000;
-          if (minutes < 1) minutes = 1; // Đi dưới 1p vẫn tính 1p
+          if (minutes < 1)
+            minutes = 1; // Đi dưới 1p vẫn tính 1p
 
           // 2. Tính tiền thô
           long rawFee = (minutes * PRICE_PER_HOUR) / 60;
@@ -489,24 +610,25 @@ else { // rainStatus == HIGH
 
           // 4. Hiển thị thông tin
           lcd.clear();
-          lcd.setCursor(0,0);
+          lcd.setCursor(0, 0);
           lcd.print("TG gui: ");
           lcd.print(minutes);
-          lcd.print("p"); 
+          lcd.print("p");
 
-          lcd.setCursor(0,1);
+          lcd.setCursor(0, 1);
           lcd.print(finalFee);
           lcd.print("d A=Tra");
 
           // 5. Chờ thanh toán
           // QUAN TRỌNG: Thêm server.handleClient() vào đây để web không bị treo khi chờ trả tiền
-          while(scanKeypad() != 'A'){
-             server.handleClient(); 
+          while (scanKeypad() != 'A')
+          {
+            server.handleClient();
           }
-          
+
           // GHI LOG WEB KHI ĐÃ TRẢ TIỀN
           logCar("RA: TK " + inputID + " (" + String(finalFee) + "d)"); // Log xe ra
-          logSys("Mo cong RA"); // Log hệ thống
+          logSys("Mo cong RA");                                         // Log hệ thống
           carID[i] = "";
           servoOut.write(90);
           gateOpen = true;
@@ -514,23 +636,30 @@ else { // rainStatus == HIGH
         waitingInput = false;
       }
     }
-    if(millis() - inputTimer > PASSWORD_TIMEOUT){
+    if (millis() - inputTimer > PASSWORD_TIMEOUT)
+    {
       showHome();
     }
   }
 
   // ===== ĐÓNG BARIE =====
-  if(gateOpen){
+  if (gateOpen)
+  {
     long d = gateIsIn ? dIn : dOut;
-    if(d > DIST_THRESHOLD){
-      if(gateTimer == 0) gateTimer = millis();
-      if(millis() - gateTimer > GATE_CLOSE_DELAY){
+    if (d > DIST_THRESHOLD)
+    {
+      if (gateTimer == 0)
+        gateTimer = millis();
+      if (millis() - gateTimer > GATE_CLOSE_DELAY)
+      {
         servoIn.write(0);
         servoOut.write(0);
         gateOpen = false;
         gateTimer = 0;
         showHome();
       }
-    } else gateTimer = 0;
+    }
+    else
+      gateTimer = 0;
   }
 }
