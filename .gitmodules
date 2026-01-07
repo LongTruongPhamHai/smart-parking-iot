@@ -1,0 +1,6 @@
+[submodule "smart-parking-client"]
+	path = smart-parking-client
+	url = https://github.com/LongTruongPhamHai/smart-parking-client
+[submodule "smart-parking-server"]
+	path = smart-parking-server
+	url = https://github.com/LongTruongPhamHai/smart-parking-server
