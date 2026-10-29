@@ -1,0 +1,19 @@
+services:
+  server:
+    build: ./smart-parking-server
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+
+  client:
+    build:
+      context: ./smart-parking-client
+      args:
+        NEXT_PUBLIC_BACKEND_URL: ${NEXT_PUBLIC_BACKEND_URL:-http://localhost:8000}
+    restart: unless-stopped
+    depends_on:
+      - server
+    ports:
+      - "3000:3000"
